@@ -1,0 +1,19 @@
+function findNb(m) {
+    // n^3 + (n-1)^3 + ... + 1^3 = m
+    function findM(nb) {
+      //if(nb === 1) { return 1; }
+      //return findM(nb - 1) + nb ** 3;
+      let total = 0;
+      for(let i=1; i <= nb; i++) {
+        total += i ** 3;
+      }
+      return total;
+    }
+    
+    for(let i = Math.round(m ** .33); i > Math.round(m ** .25); i--) {
+      if(findM(i) === m) { 
+        return i;
+      }
+    }
+    return (-1);
+}

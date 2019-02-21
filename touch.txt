@@ -1,0 +1,12 @@
+function findNb(m) {
+    function findM(nb) {
+      //return findM(nb - 1) + nb ** 3;
+      let total = 0;
+      for(let i=1; i <= nb; i++) {
+        total += i ** 3;
+      }
+      return total;
+    }
+    return -1;
+}
+
