@@ -4,8 +4,6 @@ class Molecule {
     this.atoms = [];
     this.branchI = 0;
     this.branches = {};
-    // this.formula = "";
-    // this.molecularWeight = 0;
     this.locked = false;
     this.currentInstance = [];
     this.currentId = 0;
@@ -13,15 +11,15 @@ class Molecule {
 
   get formula() {
     if (this.atoms.length === 0) return "";
-    const elements = [...this.atoms];
 
-    const tallyElem = el => {
+    const tallyElem = function(el) {
+      const elements = [...this.atoms];
+
       if (el) {
-        const els = elements.filter(a => a.element === el).length;
-        return els > 0 ? el + (els > 1 ? els : "") : "";
+        const elementCount = elements.filter(a => a.element === el).length;
+        return elementCount > 0 ? el + (elementCount > 1 ? elementCount : "") : "";
       }
 
-      let res = "";
       const obj = elements
         .filter(
           a => a.element !== "C" && a.element !== "H" && a.element !== "O"
@@ -34,15 +32,18 @@ class Molecule {
           }),
           {}
         );
-
-      for (elem in obj) {
-        res += tallyElem(elem);
+          
+      let result = "";
+      for (let elem in obj) {
+        result += tallyElem(elem);
       }
+
+      return result;
     };
 
     return [tallyElem("C"), tallyElem("H"), tallyElem("O"), tallyElem()]
-      .join("")
-      .replace(/[,]+/g, ",");
+      .filter(i => i)
+      .join("");
   }
 
   get molecularWeight() {
@@ -113,6 +114,18 @@ class Molecule {
     ARGS: [nc,nb,elt], ...
     Mutate the carbon number nc in the branch nb (reminder: both 1-indexed) to the chemical element elt, as a string (this is mutation, the id number of the instance stays the same. See the Atom class specs about that).
     */
+   
+    args.forEach(mutation => {
+      const [nc, nb, elt] = mutation;
+      const carbonToMutate = this.findTargetCarbon(nc, nb);
+      const currentTotal = carbonToMutate.valenceTotal;
+      const { valence } = Atom.info[elt];
+      if(currentTotal >= valence) {
+        carbonToMutate.element = elt;
+      } else {
+        throw new InvalidBond("Wrong mutation");
+      }
+    })
     return this;
   }
 
@@ -121,12 +134,39 @@ class Molecule {
     ARGS: [nc,nb,elt], ...
     Add a new Atom of kind elt (string) on the carbon number nc in the branch nb. Atoms added this way are not considered as being part of the branch they are bonded to.
     */
+
+    args.forEach(addition => {
+      const [nc, nb, elt] = addition;
+      const targetCarbon = this.branches[nb].filter(e => e.id === nc)[0];
+      const elementToAdd = new Atom(elt, ++this.currentId);
+      targetCarbon.bonded.push(elementToAdd);
+      elementToAdd.bonded.push(targetCarbon);
+      this.atoms.push(elementToAdd);
+    })
+
+   return this;
   }
 
   addChaining(...args) {
+    args.forEach(chain => {
+      const [nc, nb, ...elements] = chain;
+      const targetCarbon = this.findTargetCarbon(nc, nb);
+      targetCarbon.subchain = [];
+      const prevElement = targetCarbon;
+      elements.forEach(el => {
+        const element = new Atom(el, ++this.currentId);
+        prevElement.bonded.push(element);
+        element.bonded.push(prevElement);
+        prevElement = element;
+        targetCarbon.subchain.push(element);
+        this.atoms.push(element);
+      })
+    })
     /*
     ARGS: nc, nb, elt1, elt2, ...
-    Starting from the carbon nc in the branch nb, add successively all the elements provided as arguments, following themselves. Meaning: m.add_chaining(2, 5, "C", "C", "C", "Mg", "Br") will add the chain ...-C-C-C-Mg-Br to the atom number 2 in the branch 5. As for the add method, this chain is not considered as a new branch of the molecule.
+    Starting from the carbon nc in the branch nb, add successively all the elements provided as arguments, following themselves. 
+    Meaning: m.add_chaining(2, 5, "C", "C", "C", "Mg", "Br") will add the chain ...-C-C-C-Mg-Br to the atom number 2 in the branch 5. 
+    As for the add method, this chain is not considered as a new branch of the molecule.
     */
     return this;
   }
@@ -158,6 +198,10 @@ class Molecule {
     /*
     Make the molecule modifiable again. Hydrogens should be removed (id numbers of the remaining atoms should be continuous, beginning at 1), as well as any empty branch you might encounter during the operation (see the related behaviors below for additional information).
     */
+  }
+
+  findTargetCarbon(nc, nb) {
+    return this.branches[nb].filter(e => e.id === nc)[0];
   }
 }
 
@@ -293,6 +337,36 @@ Atom.info = {
   }
 };
 
+
+
+
+class InvalidBond extends Error {
+  constructor(message) {
+    super(message);
+    this.name = InvalidBond;
+  }
+}
+
+class UnlockedMolecule extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "UnlockedMolecule";
+  }
+}
+
+class LockedMolecule extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "LockedMolecule";
+  }
+}
+
+
+
+
+
+
+
 const elements = [
   {
     element: "C",
@@ -359,10 +433,50 @@ const elements = [
 // const cyclohexane = new Molecule("cyclohexane").brancher(6).bounder([1, 1, 6, 1]).closer();
 // console.log(cyclohexane)
 
-const dmc = new Molecule("dmc")
-  .brancher(9, 1, 1)
-  .bounder([4, 1, 9, 1], [5, 1, 1, 2], [5, 1, 1, 3])
-  .closer();
+// const dmc = new Molecule("dmc")
+//   .brancher(9, 1, 1)
+//   .bounder([4, 1, 9, 1], [5, 1, 1, 2], [5, 1, 1, 3])
+//   .closer();
 
-console.log(dmc.formula);
-console.log(dmc.molecularWeight);
+// console.log(dmc.formula);
+// console.log(dmc.molecularWeight);
+
+
+const config = [
+  [/* Furane:
+      O
+    /   \
+  CH     CH
+   \\   //
+    CH-CH
+  */,
+  'Furane: no additional hydrogens while closing after mutation',
+    [5],
+    [[5,1,1,1], [5,1,4,1], [2,1,3,1]],
+    [[1,1,'O']],
+    'C4H4O',
+    68,
+    ['Atom(O.1: C2,C5)', 'Atom(C.2: C3,C3,O1,H)', 'Atom(C.3: C2,C2,C4,H)', 'Atom(C.4: C3,C5,C5,H)', 'Atom(C.5: C4,C4,O1,H)']
+  ],
+  
+  
+    [/* isopropylmagnesium bromide:
+    CH3
+      \
+      CH-Mg-Br
+      /
+    CH3
+    */,
+    'isopropylmagnesium bromide',
+      [4, 1],
+      [[2,1,1,2]],
+      [[3,1,'Mg'], [4,1,'Br']],
+      'C3H7BrMg',
+      147.3,
+      ['Atom(C.1: C2,H,H,H)', 'Atom(C.2: C1,C5,Mg3,H)', 'Atom(Mg.3: C2,Br4)', 'Atom(Br.4: Mg3)', 'Atom(C.5: C2,H,H,H)']
+    ]
+  ];
+
+  config.forEach(([_, name, branch, bonds, mut, formula, mm, carbToStr]) => {
+    const m = new Molecule(name).brancher(...branch).bounder(...bonds).mutate(...mut).closer();
+})
